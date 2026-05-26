@@ -283,7 +283,94 @@ button.ghost:hover {
   box-shadow: 0 4px 14px rgba(23, 32, 42, 0.04);
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+.body.plain {
   white-space: pre-wrap;
+}
+
+.body.markdown {
+  white-space: normal;
+}
+
+.body.markdown > :first-child {
+  margin-top: 0;
+}
+
+.body.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.body.markdown p {
+  margin: 0 0 10px;
+}
+
+.body.markdown ul,
+.body.markdown ol {
+  margin: 4px 0 10px;
+  padding-left: 22px;
+}
+
+.body.markdown li {
+  margin: 3px 0;
+}
+
+.body.markdown blockquote {
+  margin: 8px 0 10px;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid rgba(29, 122, 140, 0.34);
+  color: #44515f;
+}
+
+.body.markdown h3,
+.body.markdown h4,
+.body.markdown h5,
+.body.markdown h6 {
+  margin: 12px 0 8px;
+  line-height: 1.35;
+}
+
+.body.markdown h3 {
+  font-size: 16px;
+}
+
+.body.markdown h4,
+.body.markdown h5,
+.body.markdown h6 {
+  font-size: 14px;
+}
+
+.body.markdown code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #eef1f4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.body.markdown pre {
+  max-width: min(720px, 100%);
+  margin: 8px 0 10px;
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid #d2d9e2;
+  border-radius: 8px;
+  background: #101820;
+}
+
+.body.markdown pre code {
+  display: block;
+  padding: 0;
+  color: #f7fafc;
+  background: transparent;
+  white-space: pre;
+}
+
+.body.markdown a {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 .message.user .body {

@@ -24,6 +24,213 @@ let currentToolRail;
 let currentModelKey;
 let currentSessionFile;
 
+function shouldRenderMarkdown(role) {
+  return role === "assistant" || role === "system" || role === "error";
+}
+
+function isBlank(line) {
+  return /^\s*$/.test(line);
+}
+
+function isSafeUrl(url) {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return ["http:", "https:", "mailto:"].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function findNextInlineToken(text, from) {
+  const positions = ["`", "**", "__", "["]
+    .map((token) => text.indexOf(token, from))
+    .filter((position) => position >= 0);
+  return positions.length ? Math.min(...positions) : text.length;
+}
+
+function appendInline(parent, text) {
+  let index = 0;
+
+  while (index < text.length) {
+    if (text[index] === "\n") {
+      parent.append(document.createElement("br"));
+      index += 1;
+      continue;
+    }
+
+    if (text[index] === "`") {
+      const end = text.indexOf("`", index + 1);
+      if (end > index + 1) {
+        const code = document.createElement("code");
+        code.textContent = text.slice(index + 1, end);
+        parent.append(code);
+        index = end + 1;
+        continue;
+      }
+    }
+
+    const strongToken = text.startsWith("**", index) ? "**" : text.startsWith("__", index) ? "__" : "";
+    if (strongToken) {
+      const end = text.indexOf(strongToken, index + 2);
+      if (end > index + 2) {
+        const strong = document.createElement("strong");
+        appendInline(strong, text.slice(index + 2, end));
+        parent.append(strong);
+        index = end + 2;
+        continue;
+      }
+    }
+
+    if (text[index] === "[") {
+      const labelEnd = text.indexOf("]", index + 1);
+      const urlStart = labelEnd >= 0 ? labelEnd + 1 : -1;
+      if (urlStart >= 0 && text[urlStart] === "(") {
+        const urlEnd = text.indexOf(")", urlStart + 1);
+        const url = urlEnd >= 0 ? text.slice(urlStart + 1, urlEnd).trim() : "";
+        if (url && isSafeUrl(url)) {
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.rel = "noreferrer";
+          if (/^https?:/i.test(url)) anchor.target = "_blank";
+          appendInline(anchor, text.slice(index + 1, labelEnd));
+          parent.append(anchor);
+          index = urlEnd + 1;
+          continue;
+        }
+      }
+    }
+
+    const next = findNextInlineToken(text, index + 1);
+    parent.append(document.createTextNode(text.slice(index, next)));
+    index = next;
+  }
+}
+
+function appendParagraph(parent, lines) {
+  const paragraph = document.createElement("p");
+  appendInline(paragraph, lines.join("\n"));
+  parent.append(paragraph);
+}
+
+function isBlockStart(line) {
+  return (
+    /^```/.test(line) ||
+    /^#{1,4}\s+/.test(line) ||
+    /^>\s?/.test(line) ||
+    /^\s*[-*+]\s+/.test(line) ||
+    /^\s*\d+[.)]\s+/.test(line)
+  );
+}
+
+function renderMarkdown(text) {
+  const fragment = document.createDocumentFragment();
+  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (isBlank(line)) {
+      index += 1;
+      continue;
+    }
+
+    const fence = line.match(/^```([a-zA-Z0-9_-]+)?\s*$/);
+    if (fence) {
+      const codeLines = [];
+      index += 1;
+      while (index < lines.length && !/^```\s*$/.test(lines[index])) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      if (fence[1]) code.dataset.lang = fence[1];
+      code.textContent = codeLines.join("\n");
+      pre.append(code);
+      fragment.append(pre);
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      const level = Math.min(heading[1].length + 2, 6);
+      const title = document.createElement(`h${level}`);
+      appendInline(title, heading[2].trim());
+      fragment.append(title);
+      index += 1;
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      const quote = document.createElement("blockquote");
+      const quoteLines = [];
+      while (index < lines.length && /^>\s?/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^>\s?/, ""));
+        index += 1;
+      }
+      appendParagraph(quote, quoteLines);
+      fragment.append(quote);
+      continue;
+    }
+
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    if (unordered) {
+      const list = document.createElement("ul");
+      while (index < lines.length) {
+        const item = lines[index].match(/^\s*[-*+]\s+(.+)$/);
+        if (!item) break;
+        const li = document.createElement("li");
+        appendInline(li, item[1]);
+        list.append(li);
+        index += 1;
+      }
+      fragment.append(list);
+      continue;
+    }
+
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      const list = document.createElement("ol");
+      while (index < lines.length) {
+        const item = lines[index].match(/^\s*\d+[.)]\s+(.+)$/);
+        if (!item) break;
+        const li = document.createElement("li");
+        appendInline(li, item[1]);
+        list.append(li);
+        index += 1;
+      }
+      fragment.append(list);
+      continue;
+    }
+
+    const paragraphLines = [];
+    while (index < lines.length && !isBlank(lines[index]) && !isBlockStart(lines[index])) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+    appendParagraph(fragment, paragraphLines);
+  }
+
+  if (!fragment.childNodes.length) {
+    fragment.append(document.createTextNode(""));
+  }
+
+  return fragment;
+}
+
+function setBodyText(body, text, markdown = body.dataset.markdown === "true") {
+  body.dataset.rawText = text || "";
+  body.replaceChildren();
+  if (markdown) {
+    body.append(renderMarkdown(text));
+  } else {
+    body.textContent = text || "";
+  }
+}
+
 function resetMessageView() {
   els.messages.textContent = "";
   currentAssistant = null;
@@ -66,8 +273,10 @@ function messageEl(role, text = "") {
   label.textContent = roleLabels[role] || role;
 
   const body = document.createElement("div");
-  body.className = "body";
-  body.textContent = text;
+  const markdown = shouldRenderMarkdown(role);
+  body.className = `body ${markdown ? "markdown" : "plain"}`;
+  body.dataset.markdown = markdown ? "true" : "false";
+  setBodyText(body, text, markdown);
 
   row.append(label, body);
   els.messages.append(row);
@@ -163,7 +372,7 @@ function appendAssistantDelta(delta) {
   if (!currentAssistant) {
     currentAssistant = messageEl("assistant");
   }
-  currentAssistant.body.textContent += delta;
+  setBodyText(currentAssistant.body, `${currentAssistant.body.dataset.rawText || ""}${delta}`, true);
   scrollToBottom();
 }
 
@@ -241,7 +450,11 @@ function handleEvent(event) {
       break;
     case "message_end":
       if (event.message.role === "assistant" && currentAssistant) {
-        currentAssistant.body.textContent = event.message.text || currentAssistant.body.textContent;
+        setBodyText(
+          currentAssistant.body,
+          event.message.text || currentAssistant.body.dataset.rawText || currentAssistant.body.textContent,
+          true,
+        );
       }
       currentThinking = null;
       break;
