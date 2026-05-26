@@ -3,6 +3,7 @@ const els = {
   model: document.querySelector("#model"),
   modelSelect: document.querySelector("#model-select"),
   thinking: document.querySelector("#thinking"),
+  thinkingSelect: document.querySelector("#thinking-select"),
   cwd: document.querySelector("#cwd"),
   status: document.querySelector("#status"),
   statusDot: document.querySelector("#status-dot"),
@@ -35,6 +36,8 @@ const els = {
   providerMaxTokens: document.querySelector("#provider-max-tokens"),
   providerReasoning: document.querySelector("#provider-reasoning"),
   providerAuthHeader: document.querySelector("#provider-auth-header"),
+  discoverProviderModels: document.querySelector("#discover-provider-models"),
+  providerDiscoverStatus: document.querySelector("#provider-discover-status"),
   newProvider: document.querySelector("#new-provider"),
   resetProvider: document.querySelector("#reset-provider"),
   botList: document.querySelector("#bot-list"),
@@ -301,6 +304,7 @@ function setStatus(status) {
   els.status.textContent = labels[normalized] || normalized;
   els.statusDot.className = `dot ${normalized === "running" ? "running" : "idle"}`;
   els.modelSelect.disabled = normalized === "running";
+  els.thinkingSelect.disabled = normalized === "running";
   els.newSession.disabled = normalized === "running";
   for (const button of els.sessionList.querySelectorAll("button")) {
     button.disabled = normalized === "running";
@@ -363,6 +367,9 @@ function renderState(state) {
     els.modelSelect.value = currentModelKey;
   }
   els.thinking.textContent = state.thinkingLevel || "-";
+  if (state.thinkingLevel && els.thinkingSelect.value !== state.thinkingLevel) {
+    els.thinkingSelect.value = state.thinkingLevel;
+  }
   els.cwd.textContent = compactPath(state.cwd);
   els.cwd.title = state.cwd || "";
   els.session.textContent = state.sessionId ? `会话 ${state.sessionId}` : "暂无会话";
@@ -513,6 +520,10 @@ function handleEvent(event) {
     case "thinking_delta":
       appendThinkingDelta(event.delta);
       break;
+    case "thinking_level":
+      els.thinking.textContent = event.level || "-";
+      if (event.level) els.thinkingSelect.value = event.level;
+      break;
     case "tool_start":
       toolEl(event.toolName, "运行中");
       break;
@@ -572,6 +583,7 @@ function resetProviderForm() {
   els.providerMaxTokens.value = "16384";
   els.providerReasoning.checked = false;
   els.providerAuthHeader.checked = true;
+  els.providerDiscoverStatus.textContent = "";
 }
 
 function resetBotForm() {
@@ -600,6 +612,7 @@ function editProvider(provider) {
   els.providerMaxTokens.value = provider.models?.[0]?.maxTokens || 16384;
   els.providerReasoning.checked = Boolean(provider.models?.some((model) => model.reasoning));
   els.providerAuthHeader.checked = provider.authHeader !== false;
+  els.providerDiscoverStatus.textContent = "";
   els.providerId.focus();
 }
 
@@ -778,6 +791,24 @@ els.modelSelect.addEventListener("change", async () => {
   }
 });
 
+els.thinkingSelect.addEventListener("change", async () => {
+  const previous = els.thinking.textContent;
+  const level = els.thinkingSelect.value;
+  if (!level || level === previous) return;
+
+  els.thinkingSelect.disabled = true;
+  try {
+    const payload = await postJson("/api/thinking", { level });
+    renderState(payload.state);
+    messageEl("system", `已切换思考等级：${payload.level}`);
+  } catch (error) {
+    messageEl("error", error.message);
+    if (previous && previous !== "-") els.thinkingSelect.value = previous;
+  } finally {
+    els.thinkingSelect.disabled = false;
+  }
+});
+
 els.sessionList.addEventListener("click", async (event) => {
   const button = event.target.closest(".session-item");
   if (!button) return;
@@ -834,6 +865,29 @@ els.newProvider.addEventListener("click", resetProviderForm);
 els.resetProvider.addEventListener("click", resetProviderForm);
 els.newBot.addEventListener("click", resetBotForm);
 els.resetBot.addEventListener("click", resetBotForm);
+
+els.discoverProviderModels.addEventListener("click", async () => {
+  const body = {
+    baseUrl: els.providerBaseUrl.value.trim(),
+    apiKey: els.providerApiKey.value.trim(),
+    api: els.providerApi.value,
+    authHeader: els.providerAuthHeader.checked,
+    original: els.providerOriginal.value.trim(),
+    provider: els.providerId.value.trim(),
+  };
+
+  els.discoverProviderModels.disabled = true;
+  els.providerDiscoverStatus.textContent = "正在获取模型列表...";
+  try {
+    const payload = await postJson("/api/config/discover-models", body);
+    els.providerModels.value = payload.models.map((model) => model.id).join("\n");
+    els.providerDiscoverStatus.textContent = `已获取 ${payload.models.length} 个模型`;
+  } catch (error) {
+    els.providerDiscoverStatus.textContent = error.message;
+  } finally {
+    els.discoverProviderModels.disabled = false;
+  }
+});
 
 els.providerForm.addEventListener("submit", async (event) => {
   event.preventDefault();

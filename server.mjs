@@ -48,6 +48,92 @@ let unsubscribeSessionEvents;
 let lastRunId = 0;
 let feishuBridge;
 
+const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
+
+function joinApiPath(baseUrl, path) {
+  const normalized = String(baseUrl || "").replace(/\/+$/, "");
+  return `${normalized}${path}`;
+}
+
+function modelListUrls(baseUrl) {
+  const normalized = String(baseUrl || "").replace(/\/+$/, "");
+  const urls = [joinApiPath(normalized, "/models")];
+  if (!/\/v\d+(?:beta)?$/i.test(normalized)) {
+    urls.push(joinApiPath(normalized, "/v1/models"));
+  }
+  return [...new Set(urls)];
+}
+
+function normalizeDiscoveredModels(payload) {
+  const items = Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.models)
+      ? payload.models
+      : Array.isArray(payload)
+        ? payload
+        : [];
+  const seen = new Set();
+  return items
+    .map((item) => {
+      const id =
+        typeof item === "string"
+          ? item
+          : item?.id || item?.name || item?.model || item?.model_id || item?.modelId;
+      return String(id || "").trim();
+    })
+    .filter((id) => {
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
+    .sort((a, b) => a.localeCompare(b));
+}
+
+async function discoverProviderModels(body) {
+  const baseUrl = String(body.baseUrl || "").trim();
+  const apiKey = String(body.apiKey || "").trim();
+  const authHeader = body.authHeader !== false;
+  const timeoutMs = 10_000;
+
+  if (!baseUrl) throw new Error("需要填写 Base URL。");
+
+  const headers = { accept: "application/json" };
+  if (apiKey && authHeader) headers.authorization = `Bearer ${apiKey}`;
+  if (apiKey && !authHeader) headers["x-api-key"] = apiKey;
+
+  let lastError;
+  for (const url of modelListUrls(baseUrl)) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { headers, signal: controller.signal });
+      const text = await response.text();
+      if (!response.ok) {
+        lastError = `${response.status} ${response.statusText}${text ? `: ${text.slice(0, 240)}` : ""}`;
+        continue;
+      }
+      const payload = text ? JSON.parse(text) : {};
+      const models = normalizeDiscoveredModels(payload);
+      if (!models.length) {
+        lastError = "接口返回成功，但没有发现模型 ID。";
+        continue;
+      }
+      return models.map((id) => ({ id }));
+    } catch (error) {
+      lastError =
+        error?.name === "AbortError"
+          ? `请求 ${url} 超过 ${timeoutMs / 1000} 秒未响应`
+          : error instanceof Error
+            ? error.message
+            : String(error);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw new Error(`无法获取模型列表：${lastError || "未知错误"}`);
+}
+
 function broadcast(payload) {
   const data = `data: ${JSON.stringify(payload)}\n\n`;
   for (const client of clients) {
@@ -406,6 +492,20 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (url.pathname === "/api/config/discover-models" && req.method === "POST") {
+    const body = await readJson(req);
+    if (!body.apiKey && body.original) {
+      const providers = await configStore.listProviders();
+      const existing = providers.find((provider) => provider.provider === body.original);
+      if (existing?.hasApiKey) {
+        const rawConfig = await configStore.readModelsConfig();
+        body.apiKey = rawConfig.providers?.[body.original]?.apiKey;
+      }
+    }
+    respondJson(res, 200, { ok: true, models: await discoverProviderModels(body) });
+    return;
+  }
+
   const providerMatch = url.pathname.match(/^\/api\/config\/providers\/([^/]+)$/);
   if (providerMatch && req.method === "DELETE") {
     await configStore.deleteProvider(decodeURIComponent(providerMatch[1]));
@@ -483,6 +583,28 @@ async function handleApi(req, res) {
     respondJson(res, 200, payload);
     broadcast({ type: "state", state: payload.state });
     broadcast({ type: "models", ...modelsPayload() });
+    return;
+  }
+
+  if (url.pathname === "/api/thinking" && req.method === "POST") {
+    const activeSession = await initSession();
+    const body = await readJson(req);
+    const level = String(body.level || "").trim();
+
+    if (!THINKING_LEVELS.has(level)) {
+      respondJson(res, 400, { error: "无效的思考等级。" });
+      return;
+    }
+
+    if (activeSession.isStreaming) {
+      respondJson(res, 409, { error: "Pi 正在运行，完成或中止后再切换思考等级。" });
+      return;
+    }
+
+    activeSession.setThinkingLevel(level);
+    const payload = { ok: true, level: activeSession.thinkingLevel, state: statePayload() };
+    respondJson(res, 200, payload);
+    broadcast({ type: "state", state: payload.state });
     return;
   }
 

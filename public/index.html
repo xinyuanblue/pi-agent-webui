@@ -46,6 +46,17 @@
             <strong id="thinking">-</strong>
           </div>
           <div class="field">
+            <label for="thinking-select">切换思考</label>
+            <select id="thinking-select">
+              <option value="off">Off</option>
+              <option value="minimal">Minimal</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">XHigh</option>
+            </select>
+          </div>
+          <div class="field">
             <span>工作目录</span>
             <strong id="cwd">-</strong>
           </div>
@@ -149,8 +160,10 @@
                 </label>
                 <div class="form-actions">
                   <button id="save-provider" type="submit">保存 API</button>
+                  <button id="discover-provider-models" class="ghost" type="button">获取模型列表</button>
                   <button id="reset-provider" class="ghost" type="button">重置</button>
                 </div>
+                <p id="provider-discover-status" class="form-status"></p>
               </form>
             </section>
 

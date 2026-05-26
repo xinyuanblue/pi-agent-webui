@@ -675,6 +675,14 @@ input[type="checkbox"] {
   justify-content: flex-end;
 }
 
+.form-status {
+  min-height: 18px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .toast {
   position: fixed;
   right: 18px;
