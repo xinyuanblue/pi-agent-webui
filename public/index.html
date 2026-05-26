@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pi WebUI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">π</div>
+          <div>
+            <h1>Pi WebUI</h1>
+            <p id="connection">连接中</p>
+          </div>
+        </div>
+
+        <section class="history">
+          <div class="history-head">
+            <h2>历史对话</h2>
+            <button id="new-session" type="button">新建</button>
+          </div>
+          <div id="session-list" class="session-list" aria-live="polite"></div>
+        </section>
+
+        <section class="meta">
+          <div class="field">
+            <span>当前模型</span>
+            <strong id="model">-</strong>
+          </div>
+          <div class="field">
+            <label for="model-select">切换模型</label>
+            <select id="model-select">
+              <option value="">加载模型中...</option>
+            </select>
+          </div>
+          <div class="field">
+            <span>思考等级</span>
+            <strong id="thinking">-</strong>
+          </div>
+          <div class="field">
+            <span>工作目录</span>
+            <strong id="cwd">-</strong>
+          </div>
+        </section>
+
+        <section class="tools">
+          <button id="abort" class="ghost" type="button">中止运行</button>
+          <button id="clear" class="ghost" type="button">清空视图</button>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <span id="status-dot" class="dot idle"></span>
+            <span id="status">空闲</span>
+          </div>
+          <small id="session">暂无会话</small>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <form id="composer" class="composer">
+          <textarea
+            id="prompt"
+            rows="3"
+            placeholder="让 Pi 检查、编辑或在工作目录中执行命令..."
+          ></textarea>
+          <div class="composer-actions">
+            <label>
+              运行中收到新消息
+              <select id="behavior">
+                <option value="followUp">排队跟进</option>
+                <option value="steer">转向插队</option>
+              </select>
+            </label>
+            <button id="send" type="submit">发送</button>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
