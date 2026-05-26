@@ -16,6 +16,41 @@ const els = {
   send: document.querySelector("#send"),
   abort: document.querySelector("#abort"),
   clear: document.querySelector("#clear"),
+  showChat: document.querySelector("#show-chat"),
+  showConfig: document.querySelector("#show-config"),
+  chatView: document.querySelector("#chat-view"),
+  configView: document.querySelector("#config-view"),
+  modelsPath: document.querySelector("#models-path"),
+  appConfigPath: document.querySelector("#app-config-path"),
+  providerList: document.querySelector("#provider-list"),
+  providerForm: document.querySelector("#provider-form"),
+  providerOriginal: document.querySelector("#provider-original"),
+  providerId: document.querySelector("#provider-id"),
+  providerName: document.querySelector("#provider-name"),
+  providerBaseUrl: document.querySelector("#provider-base-url"),
+  providerApiKey: document.querySelector("#provider-api-key"),
+  providerApi: document.querySelector("#provider-api"),
+  providerModels: document.querySelector("#provider-models"),
+  providerContext: document.querySelector("#provider-context"),
+  providerMaxTokens: document.querySelector("#provider-max-tokens"),
+  providerReasoning: document.querySelector("#provider-reasoning"),
+  providerAuthHeader: document.querySelector("#provider-auth-header"),
+  newProvider: document.querySelector("#new-provider"),
+  resetProvider: document.querySelector("#reset-provider"),
+  botList: document.querySelector("#bot-list"),
+  botForm: document.querySelector("#bot-form"),
+  botOriginal: document.querySelector("#bot-original"),
+  botId: document.querySelector("#bot-id"),
+  botName: document.querySelector("#bot-name"),
+  botAppId: document.querySelector("#bot-app-id"),
+  botAppSecret: document.querySelector("#bot-app-secret"),
+  botDomain: document.querySelector("#bot-domain"),
+  botAllowedUsers: document.querySelector("#bot-allowed-users"),
+  botRequireMention: document.querySelector("#bot-require-mention"),
+  botAutoStart: document.querySelector("#bot-auto-start"),
+  botEnabled: document.querySelector("#bot-enabled"),
+  newBot: document.querySelector("#new-bot"),
+  resetBot: document.querySelector("#reset-bot"),
 };
 
 let currentAssistant;
@@ -23,6 +58,20 @@ let currentThinking;
 let currentToolRail;
 let currentModelKey;
 let currentSessionFile;
+let currentConfig = { providers: [], feishuBots: [], feishuStatus: { bots: [] } };
+
+function h(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function toast(text) {
+  const node = h("div", "toast", text);
+  document.body.append(node);
+  setTimeout(() => node.remove(), 2600);
+}
 
 function shouldRenderMarkdown(role) {
   return role === "assistant" || role === "system" || role === "error";
@@ -486,16 +535,211 @@ function handleEvent(event) {
 }
 
 async function postJson(url, body = {}) {
+  return requestJson(url, { method: "POST", body });
+}
+
+async function requestJson(url, options = {}) {
   const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    method: options.method || "GET",
+    headers: options.body === undefined ? undefined : { "content-type": "application/json" },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.error || response.statusText);
   }
   return response.json();
+}
+
+function showView(name) {
+  const config = name === "config";
+  els.chatView.classList.toggle("hidden", config);
+  els.configView.classList.toggle("hidden", !config);
+  els.showChat.classList.toggle("active", !config);
+  els.showConfig.classList.toggle("active", config);
+  if (config) loadConfig().catch((error) => toast(error.message));
+}
+
+function resetProviderForm() {
+  els.providerForm.reset();
+  els.providerOriginal.value = "";
+  els.providerId.value = "deepseek";
+  els.providerName.value = "DeepSeek";
+  els.providerBaseUrl.value = "https://api.deepseek.com";
+  els.providerApi.value = "openai-completions";
+  els.providerModels.value = "deepseek-chat\ndeepseek-reasoner";
+  els.providerContext.value = "128000";
+  els.providerMaxTokens.value = "16384";
+  els.providerReasoning.checked = false;
+  els.providerAuthHeader.checked = true;
+}
+
+function resetBotForm() {
+  els.botForm.reset();
+  els.botOriginal.value = "";
+  els.botId.value = "";
+  els.botName.value = "";
+  els.botAppId.value = "";
+  els.botAppSecret.value = "";
+  els.botDomain.value = "feishu";
+  els.botAllowedUsers.value = "";
+  els.botRequireMention.checked = true;
+  els.botAutoStart.checked = true;
+  els.botEnabled.checked = true;
+}
+
+function editProvider(provider) {
+  els.providerOriginal.value = provider.provider;
+  els.providerId.value = provider.provider;
+  els.providerName.value = provider.name || provider.provider;
+  els.providerBaseUrl.value = provider.baseUrl || "";
+  els.providerApiKey.value = "";
+  els.providerApi.value = provider.api || "openai-completions";
+  els.providerModels.value = (provider.models || []).map((model) => model.id).join("\n");
+  els.providerContext.value = provider.models?.[0]?.contextWindow || 128000;
+  els.providerMaxTokens.value = provider.models?.[0]?.maxTokens || 16384;
+  els.providerReasoning.checked = Boolean(provider.models?.some((model) => model.reasoning));
+  els.providerAuthHeader.checked = provider.authHeader !== false;
+  els.providerId.focus();
+}
+
+function editBot(bot) {
+  els.botOriginal.value = bot.id;
+  els.botId.value = bot.id;
+  els.botName.value = bot.name || bot.id;
+  els.botAppId.value = bot.appId || "";
+  els.botAppSecret.value = "";
+  els.botDomain.value = bot.domain || "feishu";
+  els.botAllowedUsers.value = (bot.allowedUsers || []).join("\n");
+  els.botRequireMention.checked = bot.requireMention !== false;
+  els.botAutoStart.checked = bot.autoStart !== false;
+  els.botEnabled.checked = bot.enabled !== false;
+  els.botId.focus();
+}
+
+function providerCard(provider) {
+  const card = h("article", "config-card");
+  const top = h("div", "card-top");
+  const title = h("div", "card-title");
+  title.append(h("strong", "", provider.name || provider.provider), h("span", "", provider.provider));
+  top.append(title);
+
+  const badges = h("div", "badge-row");
+  badges.append(
+    h("span", "badge", provider.api || "openai-completions"),
+    h("span", provider.hasApiKey ? "badge" : "badge off", provider.hasApiKey ? "已配置 Key" : "缺少 Key"),
+    h("span", provider.authHeader ? "badge" : "badge off", provider.authHeader ? "Bearer" : "自定义鉴权"),
+  );
+
+  const meta = h("div", "card-meta");
+  meta.textContent = `${provider.baseUrl || "-"} · ${(provider.models || []).map((model) => model.id).join(", ") || "无模型"}`;
+
+  const actions = h("div", "card-actions");
+  const edit = h("button", "ghost", "编辑");
+  edit.type = "button";
+  edit.addEventListener("click", () => editProvider(provider));
+  const remove = h("button", "danger", "删除");
+  remove.type = "button";
+  remove.addEventListener("click", async () => {
+    if (!confirm(`删除 API 提供商 ${provider.provider}？`)) return;
+    const payload = await requestJson(`/api/config/providers/${encodeURIComponent(provider.provider)}`, { method: "DELETE" });
+    renderConfig(payload.config);
+    toast("API 提供商已删除");
+  });
+  actions.append(edit, remove);
+  card.append(top, badges, meta, actions);
+  return card;
+}
+
+function botStatus(bot) {
+  const status = currentConfig.feishuStatus?.bots?.find((item) => item.id === bot.id);
+  return status || {};
+}
+
+function botCard(bot) {
+  const status = botStatus(bot);
+  const card = h("article", "config-card");
+  const top = h("div", "card-top");
+  const title = h("div", "card-title");
+  title.append(h("strong", "", bot.name || bot.id), h("span", "", bot.id));
+  top.append(title);
+
+  const badges = h("div", "badge-row");
+  badges.append(
+    h("span", status.connected ? "badge" : "badge off", status.connected ? "已连接" : "未连接"),
+    h("span", bot.enabled ? "badge" : "badge off", bot.enabled ? "已启用" : "已停用"),
+    h("span", bot.requireMention ? "badge" : "badge off", bot.requireMention ? "群聊需 @" : "群聊全响应"),
+    h("span", bot.hasAppSecret ? "badge" : "badge off", bot.hasAppSecret ? "已配置 Secret" : "缺少 Secret"),
+  );
+
+  const meta = h("div", "card-meta");
+  meta.textContent = `${bot.appId || "-"} · 白名单 ${(bot.allowedUsers || []).length || 0} 个`;
+  if (status.lastError) meta.textContent += ` · ${status.lastError}`;
+
+  const actions = h("div", "card-actions");
+  const edit = h("button", "ghost", "编辑");
+  edit.type = "button";
+  edit.disabled = Boolean(bot.readonly);
+  edit.addEventListener("click", () => editBot(bot));
+  const start = h("button", "", "启动");
+  start.type = "button";
+  start.disabled = Boolean(status.connected);
+  start.addEventListener("click", async () => {
+    const payload = await postJson(`/api/config/feishu/bots/${encodeURIComponent(bot.id)}/start`);
+    renderConfig(payload.config);
+    toast("飞书机器人启动请求已发送");
+  });
+  const stop = h("button", "ghost", "停止");
+  stop.type = "button";
+  stop.disabled = !status.connected;
+  stop.addEventListener("click", async () => {
+    const payload = await postJson(`/api/config/feishu/bots/${encodeURIComponent(bot.id)}/stop`);
+    renderConfig(payload.config);
+    toast("飞书机器人已停止");
+  });
+  const remove = h("button", "danger", "删除");
+  remove.type = "button";
+  remove.disabled = Boolean(bot.readonly);
+  remove.addEventListener("click", async () => {
+    if (!confirm(`删除飞书机器人 ${bot.name || bot.id}？`)) return;
+    const payload = await requestJson(`/api/config/feishu/bots/${encodeURIComponent(bot.id)}`, { method: "DELETE" });
+    renderConfig(payload.config);
+    toast("飞书机器人已删除");
+  });
+  actions.append(edit, start, stop, remove);
+  card.append(top, badges, meta, actions);
+  return card;
+}
+
+function renderConfig(payload) {
+  currentConfig = payload || currentConfig;
+  els.modelsPath.textContent = currentConfig.paths?.modelsJson || "-";
+  els.modelsPath.title = currentConfig.paths?.modelsJson || "";
+  els.appConfigPath.textContent = currentConfig.paths?.appConfig || "-";
+  els.appConfigPath.title = currentConfig.paths?.appConfig || "";
+
+  els.providerList.textContent = "";
+  if (!currentConfig.providers?.length) {
+    els.providerList.append(h("p", "empty", "暂无自定义 API"));
+  } else {
+    currentConfig.providers.forEach((provider) => els.providerList.append(providerCard(provider)));
+  }
+
+  els.botList.textContent = "";
+  const statusOnlyBots = (currentConfig.feishuStatus?.bots || []).filter(
+    (status) => !currentConfig.feishuBots?.some((bot) => bot.id === status.id),
+  );
+  const displayBots = [...(currentConfig.feishuBots || []), ...statusOnlyBots];
+  if (!displayBots.length) {
+    els.botList.append(h("p", "empty", "暂无飞书机器人"));
+  } else {
+    displayBots.forEach((bot) => els.botList.append(botCard(bot)));
+  }
+}
+
+async function loadConfig() {
+  const payload = await requestJson("/api/config");
+  renderConfig(payload);
 }
 
 els.composer.addEventListener("submit", async (event) => {
@@ -583,6 +827,71 @@ els.abort.addEventListener("click", async () => {
 els.clear.addEventListener("click", () => {
   resetMessageView();
 });
+
+els.showChat.addEventListener("click", () => showView("chat"));
+els.showConfig.addEventListener("click", () => showView("config"));
+els.newProvider.addEventListener("click", resetProviderForm);
+els.resetProvider.addEventListener("click", resetProviderForm);
+els.newBot.addEventListener("click", resetBotForm);
+els.resetBot.addEventListener("click", resetBotForm);
+
+els.providerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = {
+    original: els.providerOriginal.value.trim(),
+    provider: els.providerId.value.trim(),
+    name: els.providerName.value.trim(),
+    baseUrl: els.providerBaseUrl.value.trim(),
+    apiKey: els.providerApiKey.value.trim(),
+    api: els.providerApi.value,
+    models: els.providerModels.value,
+    contextWindow: Number(els.providerContext.value || 128000),
+    maxTokens: Number(els.providerMaxTokens.value || 16384),
+    reasoning: els.providerReasoning.checked,
+    authHeader: els.providerAuthHeader.checked,
+  };
+
+  try {
+    const payload = await postJson("/api/config/providers", body);
+    renderConfig(payload.config);
+    renderModels(await requestJson("/api/models"));
+    toast("API 配置已保存");
+    els.providerOriginal.value = payload.provider.provider;
+    els.providerApiKey.value = "";
+  } catch (error) {
+    toast(error.message);
+  }
+});
+
+els.botForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = {
+    original: els.botOriginal.value.trim(),
+    id: els.botId.value.trim(),
+    name: els.botName.value.trim(),
+    appId: els.botAppId.value.trim(),
+    appSecret: els.botAppSecret.value.trim(),
+    domain: els.botDomain.value,
+    allowedUsers: els.botAllowedUsers.value,
+    requireMention: els.botRequireMention.checked,
+    autoStart: els.botAutoStart.checked,
+    enabled: els.botEnabled.checked,
+  };
+
+  try {
+    const payload = await postJson("/api/config/feishu/bots", body);
+    renderConfig(payload.config);
+    toast("飞书机器人配置已保存");
+    els.botOriginal.value = payload.bot.id;
+    els.botAppSecret.value = "";
+  } catch (error) {
+    toast(error.message);
+  }
+});
+
+resetProviderForm();
+resetBotForm();
+loadConfig().catch(() => {});
 
 const source = new EventSource("/api/events");
 source.onopen = () => {

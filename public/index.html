@@ -17,6 +17,11 @@
           </div>
         </div>
 
+        <nav class="nav">
+          <button id="show-chat" class="nav-item active" type="button">对话</button>
+          <button id="show-config" class="nav-item" type="button">配置</button>
+        </nav>
+
         <section class="history">
           <div class="history-head">
             <h2>历史对话</h2>
@@ -61,25 +66,154 @@
           <small id="session">暂无会话</small>
         </header>
 
-        <div id="messages" class="messages"></div>
+        <section id="chat-view" class="view chat-view">
+          <div id="messages" class="messages"></div>
 
-        <form id="composer" class="composer">
-          <textarea
-            id="prompt"
-            rows="3"
-            placeholder="让 Pi 检查、编辑或在工作目录中执行命令..."
-          ></textarea>
-          <div class="composer-actions">
-            <label>
-              运行中收到新消息
-              <select id="behavior">
-                <option value="followUp">排队跟进</option>
-                <option value="steer">转向插队</option>
-              </select>
-            </label>
-            <button id="send" type="submit">发送</button>
+          <form id="composer" class="composer">
+            <textarea
+              id="prompt"
+              rows="3"
+              placeholder="让 Pi 检查、编辑或在工作目录中执行命令..."
+            ></textarea>
+            <div class="composer-actions">
+              <label>
+                运行中收到新消息
+                <select id="behavior">
+                  <option value="followUp">排队跟进</option>
+                  <option value="steer">转向插队</option>
+                </select>
+              </label>
+              <button id="send" type="submit">发送</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="config-view" class="view config-view hidden">
+          <div class="config-layout">
+            <section class="config-section">
+              <div class="section-head">
+                <div>
+                  <h2>API 提供商</h2>
+                  <p id="models-path">-</p>
+                </div>
+                <button id="new-provider" type="button">新增 API</button>
+              </div>
+              <div id="provider-list" class="card-list"></div>
+              <form id="provider-form" class="config-form">
+                <input id="provider-original" type="hidden" />
+                <div class="form-grid">
+                  <label>
+                    Provider ID
+                    <input id="provider-id" placeholder="deepseek" required />
+                  </label>
+                  <label>
+                    显示名称
+                    <input id="provider-name" placeholder="DeepSeek" />
+                  </label>
+                  <label>
+                    Base URL
+                    <input id="provider-base-url" placeholder="https://api.deepseek.com" required />
+                  </label>
+                  <label>
+                    API Key
+                    <input id="provider-api-key" type="password" placeholder="留空则保留已有密钥" />
+                  </label>
+                  <label>
+                    接口类型
+                    <select id="provider-api">
+                      <option value="openai-completions">OpenAI 兼容 Chat Completions</option>
+                      <option value="openai-responses">OpenAI Responses</option>
+                      <option value="anthropic-messages">Anthropic Messages</option>
+                    </select>
+                  </label>
+                  <label>
+                    模型 ID
+                    <textarea id="provider-models" rows="3" placeholder="deepseek-chat&#10;deepseek-reasoner" required></textarea>
+                  </label>
+                  <label>
+                    上下文窗口
+                    <input id="provider-context" type="number" min="1" value="128000" />
+                  </label>
+                  <label>
+                    最大输出
+                    <input id="provider-max-tokens" type="number" min="1" value="16384" />
+                  </label>
+                </div>
+                <label class="check-row">
+                  <input id="provider-reasoning" type="checkbox" />
+                  支持推理输出
+                </label>
+                <label class="check-row">
+                  <input id="provider-auth-header" type="checkbox" checked />
+                  自动添加 Authorization Bearer
+                </label>
+                <div class="form-actions">
+                  <button id="save-provider" type="submit">保存 API</button>
+                  <button id="reset-provider" class="ghost" type="button">重置</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="config-section">
+              <div class="section-head">
+                <div>
+                  <h2>飞书机器人</h2>
+                  <p id="app-config-path">-</p>
+                </div>
+                <button id="new-bot" type="button">新增机器人</button>
+              </div>
+              <div id="bot-list" class="card-list"></div>
+              <form id="bot-form" class="config-form">
+                <input id="bot-original" type="hidden" />
+                <div class="form-grid">
+                  <label>
+                    机器人 ID
+                    <input id="bot-id" placeholder="work-bot" />
+                  </label>
+                  <label>
+                    名称
+                    <input id="bot-name" placeholder="工作助手" />
+                  </label>
+                  <label>
+                    App ID
+                    <input id="bot-app-id" placeholder="cli_xxx" required />
+                  </label>
+                  <label>
+                    App Secret
+                    <input id="bot-app-secret" type="password" placeholder="留空则保留已有密钥" />
+                  </label>
+                  <label>
+                    域名
+                    <select id="bot-domain">
+                      <option value="feishu">飞书</option>
+                      <option value="lark">Lark</option>
+                    </select>
+                  </label>
+                  <label>
+                    白名单用户
+                    <textarea id="bot-allowed-users" rows="3" placeholder="ou_xxx&#10;ou_yyy&#10;*"></textarea>
+                  </label>
+                </div>
+                <label class="check-row">
+                  <input id="bot-require-mention" type="checkbox" checked />
+                  群聊只响应 @机器人
+                </label>
+                <label class="check-row">
+                  <input id="bot-auto-start" type="checkbox" checked />
+                  服务启动时自动连接
+                </label>
+                <label class="check-row">
+                  <input id="bot-enabled" type="checkbox" checked />
+                  启用机器人
+                </label>
+                <div class="form-actions">
+                  <button id="save-bot" type="submit">保存机器人</button>
+                  <button id="reset-bot" class="ghost" type="button">重置</button>
+                </div>
+              </form>
+            </section>
           </div>
-        </form>
+        </section>
       </main>
     </div>
 

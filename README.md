@@ -17,6 +17,26 @@ http://localhost:4317
 
 The server reuses your normal Pi config and auth from `~/.pi/agent`.
 
+## Web Configuration
+
+The WebUI has a Chinese configuration page for local provider and Feishu bot management.
+
+API providers are written to Pi's standard model config:
+
+```text
+~/.pi/agent/models.json
+```
+
+Use this for DeepSeek or any OpenAI-compatible Chat Completions API. After saving, the WebUI refreshes the model list immediately.
+
+Feishu bot definitions are stored per working directory under:
+
+```text
+~/.pi/agent/pi-webui/
+```
+
+Secrets are saved locally and are not returned to the browser after saving. The page only shows whether an API key or App Secret exists.
+
 ## Working Directory
 
 By default, Pi runs in the directory where you start the server. To point the agent at another project:
@@ -35,7 +55,7 @@ PORT=4321 npm run dev
 
 The server can also run a Feishu bot bridge that forwards approved Feishu messages to Pi agent sessions.
 
-Copy `.env.example` to `.env`, fill the Feishu app credentials, then start the server normally:
+You can configure bots in the WebUI. For a single environment-driven bot, copy `.env.example` to `.env`, fill the Feishu app credentials, then start the server normally:
 
 ```bash
 npm run dev
@@ -74,6 +94,8 @@ http://localhost:4317/api/feishu/status
 Implemented behavior:
 
 - WebSocket long connection through the official Feishu/Lark Node SDK
+- Multiple Feishu bot definitions from the WebUI
+- Start and stop Feishu bots from the WebUI
 - Direct-message bot replies
 - Group replies only when the bot is mentioned
 - User allowlist by Feishu `open_id`

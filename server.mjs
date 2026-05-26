@@ -9,7 +9,8 @@ import {
   ModelRegistry,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { createFeishuBridge } from "./server/feishu-bridge.mjs";
+import { ConfigStore } from "./server/config-store.mjs";
+import { createFeishuBridgeManager } from "./server/feishu-bridge.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
@@ -36,6 +37,7 @@ loadDotEnv(join(__dirname, ".env"));
 
 const port = Number(process.env.PORT || 4317);
 const agentCwd = resolve(process.env.PI_WEBUI_CWD || process.cwd());
+const configStore = new ConfigStore({ cwd: agentCwd });
 
 const clients = new Set();
 let session;
@@ -166,7 +168,26 @@ function modelsPayload() {
   return {
     current: session?.model ? modelKey(session.model) : undefined,
     models,
+    error: modelRegistry?.getError(),
   };
+}
+
+async function configPayload() {
+  return {
+    paths: {
+      appConfig: configStore.configPath,
+      modelsJson: configStore.modelsJsonPath,
+    },
+    providers: await configStore.listProviders(),
+    feishuBots: await configStore.listBots(),
+    feishuStatus: feishuBridge?.status() || { enabled: false, connected: false, bots: [] },
+  };
+}
+
+function refreshModelRegistries() {
+  modelRegistry?.refresh();
+  feishuBridge?.refreshModels();
+  broadcast({ type: "models", ...modelsPayload() });
 }
 
 function normalizeEvent(event) {
@@ -369,7 +390,63 @@ async function handleApi(req, res) {
   }
 
   if (url.pathname === "/api/feishu/status" && req.method === "GET") {
-    respondJson(res, 200, feishuBridge?.status() || { enabled: false, connected: false });
+    respondJson(res, 200, feishuBridge?.status() || { enabled: false, connected: false, bots: [] });
+    return;
+  }
+
+  if (url.pathname === "/api/config" && req.method === "GET") {
+    respondJson(res, 200, await configPayload());
+    return;
+  }
+
+  if (url.pathname === "/api/config/providers" && req.method === "POST") {
+    const provider = await configStore.upsertProvider(await readJson(req));
+    refreshModelRegistries();
+    respondJson(res, 200, { ok: true, provider, config: await configPayload() });
+    return;
+  }
+
+  const providerMatch = url.pathname.match(/^\/api\/config\/providers\/([^/]+)$/);
+  if (providerMatch && req.method === "DELETE") {
+    await configStore.deleteProvider(decodeURIComponent(providerMatch[1]));
+    refreshModelRegistries();
+    respondJson(res, 200, { ok: true, config: await configPayload() });
+    return;
+  }
+
+  if (url.pathname === "/api/config/feishu/bots" && req.method === "POST") {
+    const body = await readJson(req);
+    const original = String(body.original || "").trim();
+    const bot = await configStore.upsertBot(body);
+    if (original && original !== bot.id) {
+      await feishuBridge?.stopBot(original);
+    }
+    await feishuBridge?.syncBotChange(bot.id);
+    respondJson(res, 200, { ok: true, bot, config: await configPayload() });
+    return;
+  }
+
+  const botMatch = url.pathname.match(/^\/api\/config\/feishu\/bots\/([^/]+)(?:\/(start|stop))?$/);
+  if (botMatch && req.method === "DELETE" && !botMatch[2]) {
+    const id = decodeURIComponent(botMatch[1]);
+    await feishuBridge?.stopBot(id);
+    await configStore.deleteBot(id);
+    await feishuBridge?.reloadBots();
+    respondJson(res, 200, { ok: true, config: await configPayload() });
+    return;
+  }
+
+  if (botMatch && req.method === "POST" && botMatch[2] === "start") {
+    const id = decodeURIComponent(botMatch[1]);
+    const status = await feishuBridge.startBot(id);
+    respondJson(res, 200, { ok: true, status, config: await configPayload() });
+    return;
+  }
+
+  if (botMatch && req.method === "POST" && botMatch[2] === "stop") {
+    const id = decodeURIComponent(botMatch[1]);
+    await feishuBridge.stopBot(id);
+    respondJson(res, 200, { ok: true, config: await configPayload() });
     return;
   }
 
@@ -520,10 +597,13 @@ process.on("SIGTERM", () => {
 server.listen(port, () => {
   console.log(`Pi WebUI: http://localhost:${port}`);
   console.log(`Agent cwd: ${agentCwd}`);
-  feishuBridge = createFeishuBridge({ cwd: agentCwd });
-  if (feishuBridge.enabled) {
-    console.log("Feishu bridge: enabled");
-  } else {
-    console.log("Feishu bridge: disabled");
-  }
+  feishuBridge = createFeishuBridgeManager({ cwd: agentCwd, configStore });
+  feishuBridge
+    .startConfigured()
+    .then(() => {
+      console.log(feishuBridge.enabled ? "Feishu bridge: enabled" : "Feishu bridge: disabled");
+    })
+    .catch((error) => {
+      console.error("Feishu bridge failed to start:", error);
+    });
 });
