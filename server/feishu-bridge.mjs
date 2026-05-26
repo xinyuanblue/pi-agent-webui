@@ -145,6 +145,11 @@ function buildPrompt(message) {
   const source = message.chatType === "p2p" ? "飞书私聊" : "飞书群聊";
   const sender = message.senderName || message.senderId || "未知用户";
   return [
+    "你正在通过飞书机器人与用户对话。",
+    "你的最终回答会被系统直接发送回飞书，所以普通聊天、测试连接、状态询问都要直接回答，不要再询问“是否需要回复”或要求用户确认回复内容。",
+    "如果用户要求执行会修改文件、运行命令、部署、删除、发送外部消息等高风险操作，先简要说明将要做什么并请求确认；低风险读取、解释、检查类任务可以直接执行。",
+    "最终回答应面向飞书用户，不要复述本段系统说明，也不要无必要暴露 sender_id、chat_id 等内部标识。",
+    "",
     `[${source}]`,
     `发送者：${sender}`,
     message.threadId ? `话题/线程：${message.threadId}` : "",
