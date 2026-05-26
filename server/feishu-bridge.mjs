@@ -248,7 +248,20 @@ export function createFeishuBridge({ cwd }) {
   }
 
   channel.on("message", async (message) => {
-    if (!message.content?.trim()) return;
+    const content = message.content?.trim();
+    if (!content) return;
+
+    if (/^\/?(whoami|我的id|我的 open_id)$/i.test(content)) {
+      await reply(
+        message,
+        [
+          `你的 Feishu open_id：${message.senderId || "-"}`,
+          `当前 chat_id：${message.chatId || "-"}`,
+          `会话类型：${message.chatType || "-"}`,
+        ].join("\n"),
+      );
+      return;
+    }
 
     if (!isAllowed(message, allowedUsers)) {
       if (message.chatType === "p2p") {

@@ -50,6 +50,14 @@ FEISHU_ALLOWED_USERS=*            # development only; allow everyone
 FEISHU_DEBUG=true                 # verbose SDK logs
 ```
 
+To find your Feishu `open_id`, temporarily set `FEISHU_ALLOWED_USERS=*`, restart the server, then DM the bot:
+
+```text
+/whoami
+```
+
+The bot replies with your `open_id`; put that value back into `FEISHU_ALLOWED_USERS`.
+
 Required Feishu app setup:
 
 - Enable Bot capability.
