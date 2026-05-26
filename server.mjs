@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,9 +9,31 @@ import {
   ModelRegistry,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { createFeishuBridge } from "./server/feishu-bridge.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const publicDir = join(__dirname, "public");
+
+function loadDotEnv(path) {
+  let content;
+  try {
+    content = readFileSync(path, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return;
+    throw error;
+  }
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match || process.env[match[1]] !== undefined) continue;
+    process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, "");
+  }
+}
+
+loadDotEnv(join(__dirname, ".env"));
+
 const port = Number(process.env.PORT || 4317);
 const agentCwd = resolve(process.env.PI_WEBUI_CWD || process.cwd());
 
@@ -21,6 +44,7 @@ let authStorage;
 let modelRegistry;
 let unsubscribeSessionEvents;
 let lastRunId = 0;
+let feishuBridge;
 
 function broadcast(payload) {
   const data = `data: ${JSON.stringify(payload)}\n\n`;
@@ -344,6 +368,11 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (url.pathname === "/api/feishu/status" && req.method === "GET") {
+    respondJson(res, 200, feishuBridge?.status() || { enabled: false, connected: false });
+    return;
+  }
+
   if (url.pathname === "/api/models" && req.method === "GET") {
     await initSession();
     respondJson(res, 200, modelsPayload());
@@ -479,16 +508,22 @@ const server = createServer((req, res) => {
 process.on("SIGINT", () => {
   unsubscribeSessionEvents?.();
   session?.dispose();
-  process.exit(0);
+  Promise.resolve(feishuBridge?.stop()).finally(() => process.exit(0));
 });
 
 process.on("SIGTERM", () => {
   unsubscribeSessionEvents?.();
   session?.dispose();
-  process.exit(0);
+  Promise.resolve(feishuBridge?.stop()).finally(() => process.exit(0));
 });
 
 server.listen(port, () => {
   console.log(`Pi WebUI: http://localhost:${port}`);
   console.log(`Agent cwd: ${agentCwd}`);
+  feishuBridge = createFeishuBridge({ cwd: agentCwd });
+  if (feishuBridge.enabled) {
+    console.log("Feishu bridge: enabled");
+  } else {
+    console.log("Feishu bridge: disabled");
+  }
 });

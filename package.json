@@ -8,9 +8,13 @@
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.75.5"
+    "@earendil-works/pi-coding-agent": "0.75.5",
+    "@larksuiteoapi/node-sdk": "^1.66.0"
   },
   "engines": {
     "node": ">=22.19.0"
+  },
+  "overrides": {
+    "axios": "1.16.1"
   }
 }
